@@ -136,6 +136,9 @@ setup-envtest:
 test: generate manifests setup-envtest ## Run tests.
 	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; setup_envtest_env $(ENVTEST_ASSETS_DIR); go test ./... -coverprofile cover.out $(GO_TEST_GINKGO_ARGS)
 
+test-vrg-vr:
+	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; setup_envtest_env $(ENVTEST_ASSETS_DIR); go test ./controllers -coverprofile cover.out $(GO_TEST_GINKGO_ARGS) -ginkgo.focus VolumeReplicationGroupVolRep
+
 ##@ Build
 
 # Build manager binary
