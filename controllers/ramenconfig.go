@@ -52,6 +52,7 @@ const (
 	drClusterOperatorChannelNameDefault               = "alpha"
 	drClusterOperatorCatalogSourceNameDefault         = "ramen-catalog"
 	drClusterOperatorClusterServiceVersionNameDefault = drClusterOperatorPackageNameDefault + ".v0.0.1"
+	VeleroNamespaceNameDefault                        = "velero"
 )
 
 // FIXME
