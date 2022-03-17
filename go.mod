@@ -21,6 +21,7 @@ require (
 	github.com/stolostron/governance-policy-propagator v0.0.0-20220125192743-95d49290a318
 	github.com/stolostron/multicloud-operators-foundation v1.0.0-2021-10-26-20-16-14.0.20220119065659-a58b01295a6f
 	github.com/stolostron/multicloud-operators-placementrule v1.2.4-0-20220112-8eedb3f
+	github.com/vmware-tanzu/velero v1.8.1
 	go.uber.org/zap v1.19.1
 	golang.org/x/crypto v0.0.0-20211215153901-e495a2d5b3d3
 	k8s.io/api v0.23.6
@@ -34,8 +35,8 @@ require (
 require (
 	cloud.google.com/go v0.99.0 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
-	github.com/Azure/go-autorest/autorest v0.11.18 // indirect
-	github.com/Azure/go-autorest/autorest/adal v0.9.13 // indirect
+	github.com/Azure/go-autorest/autorest v0.11.21 // indirect
+	github.com/Azure/go-autorest/autorest/adal v0.9.14 // indirect
 	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
