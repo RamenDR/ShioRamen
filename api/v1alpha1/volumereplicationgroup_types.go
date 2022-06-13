@@ -133,6 +133,14 @@ type VolSyncSpec struct {
 	Disabled bool `json:"disabled,omitempty"`
 }
 
+type KubeObjectProtection struct {
+	//+optional
+	ResourceCaptureOrder [][]string `json:"resourceBackupOrder,omitempty"`
+
+	//+optional
+	ResourceRecoveryOrder [][]string `json:"resourceRestoreOrder,omitempty"`
+}
+
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // VolumeReplicationGroup (VRG) spec declares the desired schedule for data
@@ -176,6 +184,9 @@ type VolumeReplicationGroupSpec struct {
 	// relocation only, and for VolSync only
 	//+optional
 	RunFinalSync bool `json:"runFinalSync,omitempty"`
+
+	//+optional
+	KubeObjectProtection KubeObjectProtection `json:"kubeObjectProtection,omitempty"`
 }
 
 type ProtectedPVC struct {
