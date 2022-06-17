@@ -8,8 +8,7 @@ spec:
       any-pvc-label: value
   replicationState: "Primary"
   s3Profiles:
-    - s3-profile-of-east
-    - s3-profile-of-west
+    - minio-on-eyewall4
   async:
     mode: Enabled
     schedulingInterval: "10m"

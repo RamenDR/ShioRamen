@@ -34,6 +34,13 @@ const (
 	Secondary ReplicationState = "secondary"
 )
 
+type TypeSequenceOperation string
+
+const (
+	Backup  TypeSequenceOperation = "backup"
+	Restore TypeSequenceOperation = "restore"
+)
+
 // State captures the latest state of the replication operation
 type State string
 
