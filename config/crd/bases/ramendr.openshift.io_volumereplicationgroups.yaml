@@ -175,6 +175,10 @@ spec:
                 type: object
               kubeObjectProtection:
                 properties:
+                  captureInterval:
+                    description: Preferred time between captures
+                    format: duration
+                    type: string
                   resourceBackupOrder:
                     items:
                       items:
@@ -500,6 +504,19 @@ spec:
                 type: array
               finalSyncComplete:
                 type: boolean
+              kubeObjectProtection:
+                properties:
+                  lastProtectedCapture:
+                    properties:
+                      number:
+                        format: int64
+                        type: integer
+                      startTime:
+                        format: date-time
+                        nullable: true
+                        type: string
+                    type: object
+                type: object
               lastUpdateTime:
                 format: date-time
                 nullable: true
