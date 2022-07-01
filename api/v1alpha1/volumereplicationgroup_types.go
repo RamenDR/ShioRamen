@@ -142,10 +142,10 @@ type VolSyncSpec struct {
 
 type KubeObjectProtection struct {
 	//+optional
-	ResourceCaptureOrder [][]string `json:"resourceBackupOrder,omitempty"`
+	ResourceCaptureOrder [][]string `json:"resourceCaptureOrder,omitempty"`
 
 	//+optional
-	ResourceRecoveryOrder [][]string `json:"resourceRestoreOrder,omitempty"`
+	ResourceRecoveryOrder [][]string `json:"resourceRecoveryOrder,omitempty"`
 }
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.

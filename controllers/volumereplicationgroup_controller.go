@@ -363,25 +363,22 @@ func (v *VRGInstance) processTypeSequence(operation ramendrv1alpha1.TypeSequence
 			v.log.Info(fmt.Sprintf("listIndex: %d-%d=%s", includeIndex, listIndex, listItem))
 		}
 
-		backupNamespacedName := getBackupNamespacedName(v.instance.Namespace, includeIndex)
 		includeList, excludeList := getIncludeExcludeResourcesList(categories, includeIndex)
 
-		err = v.processTypeCategory(includeList, excludeList, operation, backupNamespacedName.Name)
-
+		namespacedName, err := v.processTypeCategory(includeList, excludeList, operation, includeIndex)
 		if err != nil {
 			err = fmt.Errorf("failed to %s category %d: %s (%w)",
 				string(operation), includeIndex, includeList, err)
 			errors = append(errors, err)
 		}
 
-		backupComplete := false
-		for !backupComplete {
-			backupComplete, err = backupIsDone(v.ctx, v.reconciler.APIReader,
-				objectWriter{v.reconciler.Client, v.ctx, v.log}, backupNamespacedName)
+		complete := false
+		for !complete {
+			complete, err = v.operationIsDone(operation, namespacedName)
 
 			if err != nil {
 				errors = append(errors, err)
-				backupComplete = true
+				complete = true
 			}
 		}
 	}
@@ -393,8 +390,24 @@ func (v *VRGInstance) processTypeSequence(operation ramendrv1alpha1.TypeSequence
 	return nil
 }
 
-func getBackupNamespacedName(namespace string, index int) types.NamespacedName {
-	name := fmt.Sprintf("component-%d", index)
+func (v *VRGInstance) operationIsDone(operation ramendrv1alpha1.TypeSequenceOperation,
+	namespacedName types.NamespacedName) (bool, error) {
+	if operation == ramendrv1alpha1.Backup {
+		return backupIsDone(v.ctx, v.reconciler.APIReader,
+			objectWriter{v.reconciler.Client, v.ctx, v.log}, namespacedName)
+	} else if operation == ramendrv1alpha1.Restore { // restore
+		return restoreIsDone(v.ctx, v.reconciler.APIReader, namespacedName)
+	}
+
+	return false, fmt.Errorf(fmt.Sprintf("invalid operation '%s' passed to operationIsDone.", operation))
+}
+
+func getBackupNamePrefix(namespace, vrgName string) string {
+	return fmt.Sprintf("%s-%s-component-", namespace, vrgName)
+}
+
+func getTypeSequenceNamespacedName(namespace, vrgName string, index int) types.NamespacedName {
+	name := fmt.Sprintf("%s-%d", getBackupNamePrefix(namespace, vrgName), index)
 	namespacedName := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
@@ -454,19 +467,151 @@ func (v *VRGInstance) getFullTypeSequence(operation ramendrv1alpha1.TypeSequence
 }
 
 func (v *VRGInstance) processTypeCategory(includeList, excludeList []string,
-	operation ramendrv1alpha1.TypeSequenceOperation, backupName string) error {
+	operation ramendrv1alpha1.TypeSequenceOperation, index int) (types.NamespacedName, error) {
 	// take input categories and take a backup of those types in current VRG namespace
+	namespacedName := getTypeSequenceNamespacedName(v.instance.Namespace, v.instance.Name, index)
+
 	if operation == ramendrv1alpha1.Backup {
-		err := v.kubeObjectsProtect(includeList, excludeList, backupName)
+		err := v.kubeObjectsProtect(includeList, excludeList, namespacedName.Name)
 		if err != nil {
-			return fmt.Errorf("processTypeCategory failed backup in kubeObjectsProtect (%w)", err)
+			return namespacedName, fmt.Errorf("processTypeCategory failed backup in kubeObjectsProtect (%w)", err)
 		}
 	} else if operation == ramendrv1alpha1.Restore {
-		// TODO
-		v.log.Info("processTypeCategory: restore not yet supported.")
+		backupSourceName, err := v.getBackupSourceName(includeList)
+		if err != nil {
+			return namespacedName, fmt.Errorf("processTypeCategory failed getBackupSourceName in kubeObjectsProtect (%w)", err)
+		}
+
+		err = v.kubeObjectsRecover(includeList, excludeList, namespacedName.Name, backupSourceName)
+		if err != nil {
+			return namespacedName, fmt.Errorf("processTypeCategory failed kubeObjectsRecover in kubeObjectsProtect (%w)", err)
+		}
 	}
 
-	return nil
+	return namespacedName, nil
+}
+
+func (v *VRGInstance) getBackupNames(s3ProfileName string) ([]string, error) {
+	prefix := getBackupPrefix()
+	searchPrefix := fmt.Sprintf("%s%s", prefix, getBackupNamePrefix(v.instance.Namespace, v.instance.Name))
+
+	itemList, err := v.GetItemsInS3BucketFromPrefix(s3ProfileName, searchPrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	backupNames := getUniqueStringsFromList(itemList, ParseSingleSlash, prefix)
+
+	return backupNames, nil
+}
+
+// TODO: generalize to work with multiple s3 stores...
+func (v *VRGInstance) getBackupSourceName(desiredTypes []string) (string, error) {
+	source := "MISSING"
+	errors := make([]error, 0, len(v.instance.Spec.S3Profiles))
+
+	for _, s3ProfileName := range v.instance.Spec.S3Profiles {
+		// TODO reuse objectStore kube objects from pv upload
+		objectStore, err := v.reconciler.ObjStoreGetter.ObjectStore(
+			v.ctx, v.reconciler.APIReader, s3ProfileName, v.namespacedName, v.log)
+		if err != nil {
+			v.log.Error(err, "kube objects protect object store access", "profile", s3ProfileName)
+			errors = append(errors, err)
+
+			continue
+		}
+
+		// get backup names
+		backupNames, err := v.getBackupNames(s3ProfileName)
+		if err != nil {
+			errors = append(errors, err)
+
+			continue
+		}
+
+		for _, backupName := range backupNames {
+			v.log.Info(fmt.Sprintf("found backupName=%s", backupName))
+
+			availableTypes, err := getResourcesTypesFromBackup(objectStore, backupName)
+			if err != nil {
+				errors = append(errors, err)
+
+				continue
+			}
+
+			if containsStringFromList(availableTypes, desiredTypes) {
+				source = backupName
+			}
+		}
+	}
+
+	if len(errors) > 0 {
+		return source, errors[0]
+	}
+
+	return source, nil
+}
+
+/*
+type ResourceList {
+	Resources map[string][]string
+} */
+
+// functionality reused from s3bucketView PR (commit ID: 1b710d7bd3cd87e657ddd10365b280e015181992)
+func (v *VRGInstance) GetItemsInS3BucketFromPrefix(s3ProfileName string,
+	lookupPrefix string) ([]string, error) {
+	results := make([]string, 0)
+
+	objectStore, err := v.reconciler.ObjStoreGetter.ObjectStore(v.ctx, v.reconciler.APIReader,
+		s3ProfileName, lookupPrefix, v.log)
+	if err != nil {
+		return results, fmt.Errorf("error when getting object store, err %w", err)
+	}
+
+	// empty string will get all contents; may create performance issue with large S3 contents
+	results, err = objectStore.ListKeys(lookupPrefix)
+	if err != nil {
+		return results, fmt.Errorf("%s: %w", s3ProfileName, err)
+	}
+
+	return results, nil
+}
+
+// functionality reused from s3bucketView PR (commit ID: 1b710d7bd3cd87e657ddd10365b280e015181992)
+func getUniqueStringsFromList(itemList []string, parseFunc func(string) string, prefixToRemove string) []string {
+	uniques := make(map[string]int) // map lacks "get keys" functionality
+	results := make([]string, 0)    // store results in a list to avoid loop through uniques
+
+	for _, val := range itemList {
+		prefixRemoved := val // declaration here to pass linter (instead of if/else)
+
+		if prefixToRemove != "" {
+			prefixRemoved = strings.Replace(val, prefixToRemove, "", 1)
+
+			if prefixRemoved == val { // passed invalid input; skip this
+				continue
+			}
+		}
+
+		parsed := parseFunc(prefixRemoved)
+
+		_, exists := uniques[parsed]
+
+		if !exists {
+			uniques[parsed] = 0 // placeholder value only
+
+			results = append(results, parsed)
+		}
+	}
+
+	return results
+}
+
+// functionality reused from s3bucketView PR (commit ID: 1b710d7bd3cd87e657ddd10365b280e015181992)
+func ParseSingleSlash(input string) string {
+	split := strings.Split(input, "/")
+
+	return split[0]
 }
 
 func (v *VRGInstance) processVRG() (ctrl.Result, error) {
@@ -950,6 +1095,49 @@ func (v *VRGInstance) kubeObjectsProtect(includedResourceList, excludedResourceL
 	return nil
 }
 
+func (v *VRGInstance) kubeObjectsRecover(includedResourceList, excludedResourceList []string,
+	restoreName, backupName string) error {
+	errors := make([]error, 0, len(v.instance.Spec.S3Profiles))
+
+	for _, s3ProfileName := range v.instance.Spec.S3Profiles {
+		// TODO reuse objectStore kube objects from pv upload
+		objectStore, err := v.reconciler.ObjStoreGetter.ObjectStore(
+			v.ctx,
+			v.reconciler.APIReader,
+			s3ProfileName,
+			v.namespacedName,
+			v.log,
+		)
+		if err != nil {
+			v.log.Error(err, "kube objects protect object store access", "profile", s3ProfileName)
+			errors = append(errors, err)
+
+			continue
+		}
+
+		if err := kubeObjectsRecover(v.ctx, v.reconciler.Client, v.reconciler.APIReader, v.log,
+			objectStore.AddressComponent1(),
+			objectStore.AddressComponent2(),
+			v.s3KeyPrefix(),
+			v.instance.Namespace,
+			v.instance.Namespace, // TODO: support targeted restore namespace
+			VeleroNamespaceNameDefault,
+			includedResourceList,
+			excludedResourceList,
+			restoreName,
+			backupName,
+		); err != nil {
+			errors = append(errors, err)
+		}
+	}
+
+	if len(errors) > 0 {
+		return errors[0]
+	}
+
+	return nil
+}
+
 // processAsSecondary reconciles the current instance of VRG as secondary
 func (v *VRGInstance) processAsSecondary() (ctrl.Result, error) {
 	v.log.Info("Entering processing VolumeReplicationGroup as Secondary")
@@ -1198,6 +1386,17 @@ func (v *VRGInstance) areRequiredConditionsReady() bool {
 func containsString(values []string, s string) bool {
 	for _, item := range values {
 		if item == s {
+			return true
+		}
+	}
+
+	return false
+}
+
+func containsStringFromList(targets []string, search []string) bool {
+	for targetIndex := range targets {
+		target := targets[targetIndex]
+		if containsString(search, target) {
 			return true
 		}
 	}

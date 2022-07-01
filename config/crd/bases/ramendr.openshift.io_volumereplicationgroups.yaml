@@ -169,13 +169,13 @@ spec:
                 type: object
               kubeObjectProtection:
                 properties:
-                  resourceBackupOrder:
+                  resourceCaptureOrder:
                     items:
                       items:
                         type: string
                       type: array
                     type: array
-                  resourceRestoreOrder:
+                  resourceRecoveryOrder:
                     items:
                       items:
                         type: string

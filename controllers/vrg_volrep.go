@@ -1507,11 +1507,8 @@ func (v *VRGInstance) fetchAndRestorePV() (bool, error) {
 
 		v.log.Info(fmt.Sprintf("Restored %d PVs using profile %s", len(pvList), s3ProfileName))
 
-		if err := kubeObjectsRecover(v.ctx, v.reconciler.Client, v.reconciler.APIReader, v.log,
-			objectStore.AddressComponent1(), objectStore.AddressComponent2(),
-			v.s3KeyPrefix(), v.instance.Namespace, // TODO query source namespace from velero backup kube object in s3 store
-			v.instance.Namespace, VeleroNamespaceNameDefault,
-		); err != nil {
+		// TODO: refactor processTypeSequence to take s3ProfileName input since error check is done here
+		if err := v.processTypeSequence(ramendrv1alpha1.Restore); err != nil {
 			return false, err
 		}
 
