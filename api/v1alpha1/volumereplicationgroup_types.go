@@ -148,7 +148,7 @@ const (
 	VRGActionRelocate = VRGAction("Relocate")
 )
 
-type KubeObjectProtection struct {
+type KubeObjectProtectionSpec struct {
 	//+optional
 	ResourceCaptureOrder [][]string `json:"resourceBackupOrder,omitempty"`
 
@@ -204,7 +204,7 @@ type VolumeReplicationGroupSpec struct {
 	//+optional
 	Action VRGAction `json:"action,omitempty"`
 	//+optional
-	KubeObjectProtection KubeObjectProtection `json:"kubeObjectProtection,omitempty"`
+	KubeObjectProtection *KubeObjectProtectionSpec `json:"kubeObjectProtection,omitempty"`
 }
 
 type ProtectedPVC struct {
