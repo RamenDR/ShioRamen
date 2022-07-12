@@ -65,12 +65,19 @@ spec:
     ResourceRestoreOrder:
       - ["Secret",
         "ConfigMap"]
-      - ["*cpd.ibm.com"]
-      - ["!Deployments"]
-      - [".*"]
+      - ["custom1.cpd.ibm.com",
+        "custom2.cpd.ibm.com",
+        "custom3.cpd.ibm.com"]
+      - ["Deployments",
+        "ReplicaSet",
+        "StatefulSet",
+        "CronJob",
+        "Pod"]
 ```
 
 ## Technical info
+
+### Capture/Backup locations
 
 This will take several Velero backups in a sequence. The S3 contents are
 organized as follows for the example above:
@@ -78,20 +85,45 @@ organized as follows for the example above:
 ```bash
 /s3bucket
     /bucketPrefix
-        /namespaceName
-            /vrgName
-                /backupTypeSequence
-                    /0
-                        /v1.Deployments
-                    /1
-                        /v1alpha1.custom1.cpd.ibm.com
-                        /v1alpha1.custom2.cpd.ibm.com
-                        /v1alpha1.custom3.cpd.ibm.com
-                    /2
-                        /v1.ConfigMap
-                        /v1.Secret
-                    /3
-                        / # everything else here
+        /backups
+            /namespaceName-vrgName-0
+              /v1.Deployments
+            /namespaceName-vrgName-1
+              /v1alpha1.custom1.cpd.ibm.com
+              /v1alpha1.custom2.cpd.ibm.com
+              /v1alpha1.custom3.cpd.ibm.com
+            /namespaceName-vrgName-2
+              /v1.ConfigMap
+              /v1.Secret
+            /namespaceName-vrgName-3
+              / # everything else here
+```
+
+As an example, given the following parameters:
+
+```
+s3bucket = minio
+bucketPrefix = velero
+namespaceName = myApp
+vrgName = vrg1
+```
+
+The first backup would have path `minio/velero/backups/myApp-vrg1-0`, which
+contains Deployment backups.
+
+### Recovery/Restore locations
+
+Users are not restricted to maintaining a consistent Backup/Capture and
+Recovery/Restore order. Additionally, Velero requires specifying a backup name
+from which Kube objects can be recovered. As a result, Ramen needs to match
+an existing sub-backup to a sub-restore.
+
+In the example above, the restore objects will match the objects as follows:
+
+```bash
+- ["Secret", "ConfigMap"]  -> backup 2
+- ["custom1.cpd.ibm.com", "custom2.cpd.ibm.com", "custom3.cpd.ibm.com"]  -> backup 1
+- ["Deployments", "ReplicaSet", "StatefulSet", "CronJob", "Pod"] -> backup 0 and backup 3
 ```
 
 ## Design points
