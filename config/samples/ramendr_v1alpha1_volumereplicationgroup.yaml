@@ -18,13 +18,28 @@ spec:
   replicationState: "primary"
   kubeObjectProtection:
     resourceCaptureOrder:
-      - ["Deployments"]
-      - ["*.cpd.ibm.com"]
-      - ["ConfigMap", "Secret"]
-      - [".*"]
+      - Name: config  # backup Names should be unique
+        includeClusterScopedResources: true
+        includedResources: ["ConfigMap", "Secret"]
+        labelSelector:
+          app: my-app
+      - Name: cpd
+        includedResources: ["sample1.cpd.ibm.com", "sample2.cpd.ibm.com", "sample3.cpd.ibm.com"] 
+        # labelSelector: "" # intentionally omitted - doesn't require label match
+        # includeClusterScopedResources: false # by default
+      - Name: deployments
+        includedResources: ["Deployment"]
+      - Name: everything
+        excludedResources: ""  # include everything with no history, even resources in other backups
     resourceRecoveryOrder:
-      - ["Secret",
-        "ConfigMap"]
-      - ["*.cpd.ibm.com"]
-      - ["!Deployments"]
-      - [".*"]
+      - backupName: config # API server required matching to backup struct
+        includeClusterScopedResources: true
+        includedResources: ["ConfigMap", "Secret"]
+      - backupName: cpd
+        includedResources: ["sample1.cpd.ibm.com", "sample2.cpd.ibm.com", "sample3.cpd.ibm.com"]
+        # labelSelector: "" # intentionally omitted - don't require label match
+        # includeClusterScopedResources: false # by default
+      - backupName: deployments
+        includedResources: ["Deployment"]
+      - backupName: everything
+        excludedResources: ["ConfigMap", "Secret", "Deployment", "sample1.cpd.ibm.com", "sample2.cpd.ibm.com", "sample3.cpd.ibm.com"]  # don't restore again

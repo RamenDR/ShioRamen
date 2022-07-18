@@ -28,15 +28,22 @@ metadata:
   name: volumereplicationgroup-sample
 spec:
   ...
-
   # Type Sequence section
-  KubeObjectProtection:
-    ResourceBackupOrder:
-      - ["Deployments"]
-      - ["*.cpd.ibm.com"]
-      - ["ConfigMap",
-        "Secret"]
-      - [".*"]
+  kubeObjectProtection:
+    resourceCaptureOrder:
+      - Name: config  # backup Names should be unique
+        includeClusterScopedResources: true
+        includedResources: ["ConfigMap", "Secret"]
+        labelSelector:
+          app: my-app
+      - Name: cpd
+        includedResources: ["sample1.cpd.ibm.com", "sample2.cpd.ibm.com", "sample3.cpd.ibm.com"]
+        # labelSelector: "" # intentionally omitted - doesn't require label match
+        # includeClusterScopedResources: false # by default
+      - Name: deployments
+        includedResources: ["Deployment"]
+      - Name: everything
+        excludedResources: ""  # include everything with no history, even resources in other backups
 ```
 
 ## Example Use Case: Restore
@@ -63,16 +70,17 @@ spec:
   # Type Sequence section
   KubeObjectProtection:
     ResourceRestoreOrder:
-      - ["Secret",
-        "ConfigMap"]
-      - ["custom1.cpd.ibm.com",
-        "custom2.cpd.ibm.com",
-        "custom3.cpd.ibm.com"]
-      - ["Deployments",
-        "ReplicaSet",
-        "StatefulSet",
-        "CronJob",
-        "Pod"]
+      - backupName: config # API server required matching to backup struct
+        includeClusterScopedResources: true
+        includedResources: ["ConfigMap", "Secret"]
+      - backupName: cpd
+        includedResources: ["sample1.cpd.ibm.com", "sample2.cpd.ibm.com", "sample3.cpd.ibm.com"]
+        # labelSelector: "" # intentionally omitted - don't require label match
+        # includeClusterScopedResources: false # by default
+      - backupName: deployments
+        includedResources: ["Deployment"]
+      - backupName: everything
+        excludedResources: ["ConfigMap", "Secret", "Deployment", "sample1.cpd.ibm.com", "sample2.cpd.ibm.com", "sample3.cpd.ibm.com"]  # don't restore again
 ```
 
 ## Technical info
@@ -86,16 +94,16 @@ organized as follows for the example above:
 /s3bucket
     /bucketPrefix
         /backups
-            /namespaceName-vrgName-0
-              /v1.Deployments
-            /namespaceName-vrgName-1
+            /namespaceName-vrgName-config
+              /v1.ConfigMap
+              /v1.Secret
+            /namespaceName-vrgName-cpd
               /v1alpha1.custom1.cpd.ibm.com
               /v1alpha1.custom2.cpd.ibm.com
               /v1alpha1.custom3.cpd.ibm.com
-            /namespaceName-vrgName-2
-              /v1.ConfigMap
-              /v1.Secret
-            /namespaceName-vrgName-3
+            /namespaceName-vrgName-deployments
+              /v1.Deployments
+            /namespaceName-vrgName-everything
               / # everything else here
 ```
 
@@ -121,9 +129,9 @@ an existing sub-backup to a sub-restore.
 In the example above, the restore objects will match the objects as follows:
 
 ```bash
-- ["Secret", "ConfigMap"]  -> backup 2
-- ["custom1.cpd.ibm.com", "custom2.cpd.ibm.com", "custom3.cpd.ibm.com"]  -> backup 1
-- ["Deployments", "ReplicaSet", "StatefulSet", "CronJob", "Pod"] -> backup 0 and backup 3
+- ["Secret", "ConfigMap"]  -> backup "config"
+- ["custom1.cpd.ibm.com", "custom2.cpd.ibm.com", "custom3.cpd.ibm.com"]  -> backup "cpd"
+- ["Deployments", "ReplicaSet", "StatefulSet", "CronJob", "Pod"] -> backups "deployments" and "everything"
 ```
 
 ## Design points
