@@ -133,7 +133,22 @@ type VolSyncSpec struct {
 	Disabled bool `json:"disabled,omitempty"`
 }
 
-type KubeObjectProtection struct {
+// VRGAction which will be either a Failover or Relocate
+// +kubebuilder:validation:Enum=Failover;Relocate
+type VRGAction string
+
+// These are the valid values for VRGAction
+const (
+	// Failover, VRG was failed over to/from this cluster,
+	// the to/from is determined by VRG spec.ReplicationState values of Primary/Secondary respectively
+	VRGActionFailover = VRGAction("Failover")
+
+	// Relocate, VRG was relocated to/from this cluster,
+	// the to/from is determined by VRG spec.ReplicationState values of Primary/Secondary respectively
+	VRGActionRelocate = VRGAction("Relocate")
+)
+
+type KubeObjectProtectionSpec struct {
 	//+optional
 	ResourceCaptureOrder [][]string `json:"resourceBackupOrder,omitempty"`
 
@@ -185,8 +200,11 @@ type VolumeReplicationGroupSpec struct {
 	//+optional
 	RunFinalSync bool `json:"runFinalSync,omitempty"`
 
+	// Action is either Failover or Relocate
 	//+optional
-	KubeObjectProtection KubeObjectProtection `json:"kubeObjectProtection,omitempty"`
+	Action VRGAction `json:"action,omitempty"`
+	//+optional
+	KubeObjectProtection *KubeObjectProtectionSpec `json:"kubeObjectProtection,omitempty"`
 }
 
 type ProtectedPVC struct {

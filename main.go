@@ -32,6 +32,7 @@ import (
 	plrv1 "github.com/stolostron/multicloud-operators-placementrule/pkg/apis/apps/v1"
 	velero "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	uberzap "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -73,6 +74,7 @@ func newManager() (ctrl.Manager, error) {
 		ZapOpts: []uberzap.Option{
 			uberzap.AddCaller(),
 		},
+		TimeEncoder: zapcore.ISO8601TimeEncoder,
 	}
 
 	opts.BindFlags(flag.CommandLine)
