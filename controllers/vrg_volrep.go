@@ -50,9 +50,7 @@ func (v *VRGInstance) updateFinalSyncStatus() {
 
 // reconcileVolRepsAsPrimary creates/updates VolumeReplication CR for each pvc
 // from pvcList. If it fails (even for one pvc), then requeue is set to true.
-func (v *VRGInstance) reconcileVolRepsAsPrimary() bool {
-	requeue := false
-
+func (v *VRGInstance) reconcileVolRepsAsPrimary(requeue *bool) {
 	for idx := range v.volRepPVCs {
 		pvc := &v.volRepPVCs[idx]
 		pvcNamespacedName := types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}
@@ -60,7 +58,7 @@ func (v *VRGInstance) reconcileVolRepsAsPrimary() bool {
 
 		requeueResult, skip := v.preparePVCForVRProtection(pvc, log)
 		if requeueResult {
-			requeue = true
+			*requeue = true
 
 			continue
 		}
@@ -71,7 +69,7 @@ func (v *VRGInstance) reconcileVolRepsAsPrimary() bool {
 
 		requeueResult, _, err := v.processVRAsPrimary(pvcNamespacedName, log)
 		if requeueResult {
-			requeue = true
+			*requeue = true
 		}
 
 		if err != nil {
@@ -91,7 +89,7 @@ func (v *VRGInstance) reconcileVolRepsAsPrimary() bool {
 			log.Info("Requeuing due to failure to upload PV object to S3 store(s)",
 				"errorValue", err)
 
-			requeue = true
+			*requeue = true
 
 			continue
 		}
@@ -100,52 +98,6 @@ func (v *VRGInstance) reconcileVolRepsAsPrimary() bool {
 	}
 
 	v.updateFinalSyncStatus()
-
-	v.vrgObjectProtect(&requeue)
-
-	return requeue
-}
-
-func (v *VRGInstance) vrgObjectProtect(requeue *bool) {
-	v.vrgObjectProtected = metav1.ConditionTrue
-	fail := func(err error) {
-		*requeue = true
-		v.vrgObjectProtected = metav1.ConditionFalse
-		rmnutil.ReportIfNotPresent(
-			v.reconciler.eventRecorder,
-			v.instance,
-			corev1.EventTypeWarning,
-			rmnutil.EventReasonVrgUploadFailed,
-			err.Error(),
-		)
-	}
-
-	for _, s3ProfileName := range v.instance.Spec.S3Profiles {
-		objectStore, err := v.getObjectStorer(s3ProfileName)
-		if err != nil {
-			fail(err)
-
-			continue
-		}
-
-		if err := VrgObjectProtect(objectStore, *v.instance); err != nil {
-			fail(err)
-		}
-	}
-}
-
-func s3ObjectNamePrefix(vrg ramendrv1alpha1.VolumeReplicationGroup) string {
-	return types.NamespacedName{Namespace: vrg.Namespace, Name: vrg.Name}.String() + "/"
-}
-
-const vrgS3ObjectNameSuffix = "a"
-
-func VrgObjectProtect(objectStorer ObjectStorer, vrg ramendrv1alpha1.VolumeReplicationGroup) error {
-	return uploadTypedObject(objectStorer, s3ObjectNamePrefix(vrg), vrgS3ObjectNameSuffix, vrg)
-}
-
-func VrgObjectUnprotect(objectStorer ObjectStorer, vrg ramendrv1alpha1.VolumeReplicationGroup) error {
-	return DeleteTypedObjects(objectStorer, s3ObjectNamePrefix(vrg), vrgS3ObjectNameSuffix, vrg)
 }
 
 // reconcileVolRepsAsSecondary reconciles VolumeReplication resources for the VRG as secondary
@@ -1911,7 +1863,7 @@ func (v *VRGInstance) aggregateVolRepDataProtectedCondition() {
 // set the VRG level condition to error.  If not, if at least one PVC is in a
 // protecting condition, set the VRG level condition to protecting.  If not, set
 // the VRG level condition to true.
-func (v *VRGInstance) aggregateVolRepClusterDataProtectedCondition() {
+func (v *VRGInstance) isAnyVolRepPvcClusterDataUnprotected() (bool, bool) {
 	atleastOneProtecting := false
 	atleastOneError := false
 
@@ -1921,7 +1873,6 @@ func (v *VRGInstance) aggregateVolRepClusterDataProtectedCondition() {
 		}
 
 		condition := findCondition(protectedPVC.Conditions, VRGConditionTypeClusterDataProtected)
-
 		if condition == nil ||
 			condition.Reason == VRGConditionReasonUploading {
 			atleastOneProtecting = true
@@ -1938,34 +1889,5 @@ func (v *VRGInstance) aggregateVolRepClusterDataProtectedCondition() {
 		}
 	}
 
-	if atleastOneError {
-		msg := "Cluster data of one or more PVs are unprotected"
-		setVRGClusterDataUnprotectedCondition(&v.instance.Status.Conditions, v.instance.Generation, msg)
-		v.log.Info(msg)
-
-		return
-	}
-
-	if atleastOneProtecting {
-		msg := "Cluster data of one or more PVs are in the process of being protected"
-		setVRGClusterDataProtectingCondition(&v.instance.Status.Conditions, v.instance.Generation, msg)
-		v.log.Info(msg)
-
-		return
-	}
-
-	// All PVCs in the VRG are in protected state because not a single PVC is in
-	// error condition and not a single PVC is in protecting condition.
-	v.log.Info("Cluster data of all PVs are protected")
-
-	if v.vrgObjectProtected != metav1.ConditionTrue {
-		msg := "VRG object unprotected"
-		setVRGClusterDataUnprotectedCondition(&v.instance.Status.Conditions, v.instance.Generation, msg)
-		v.log.Info(msg)
-
-		return
-	}
-
-	msg := "Kube objects are protected"
-	setVRGClusterDataProtectedCondition(&v.instance.Status.Conditions, v.instance.Generation, msg)
+	return atleastOneError, atleastOneProtecting
 }
