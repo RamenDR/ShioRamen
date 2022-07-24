@@ -1537,7 +1537,7 @@ func (v *VRGInstance) fetchAndRestorePV() error {
 
 		v.log.Info(fmt.Sprintf("Restored %d PVs using profile %s", len(pvList), s3ProfileName))
 
-		return v.kubeObjectsRecover(objectStore)
+		return v.kubeObjectsRecover(s3ProfileName, objectStore)
 	}
 
 	if NoS3 {
