@@ -87,6 +87,12 @@ type S3StoreProfile struct {
 	S3SecretRef v1.SecretReference `json:"s3SecretRef"`
 }
 
+type KubeObjectProtection struct {
+	//+optional
+	// Disabled is used to disable KubeObjectProtection usage in Ramen.
+	Disabled *bool `json:"disabled,omitempty"`
+}
+
 //+kubebuilder:object:root=true
 
 // RamenConfig is the Schema for the ramenconfig API
@@ -141,6 +147,8 @@ type RamenConfig struct {
 		// Disabled is used to disable VolSync usage in Ramen. Defaults to false.
 		Disabled bool `json:"disabled,omitempty"`
 	} `json:"volSync,omitempty"`
+
+	KubeObjectProtection *KubeObjectProtection `json:"kubeObjectProtection,omitempty"`
 }
 
 func init() {
