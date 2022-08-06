@@ -61,7 +61,9 @@ type VolumeReplicationGroupReconciler struct {
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *VolumeReplicationGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *VolumeReplicationGroupReconciler) SetupWithManager(
+	mgr ctrl.Manager, ramenConfig *ramendrv1alpha1.RamenConfig,
+) error {
 	pvcPredicate := pvcPredicateFunc()
 	pvcMapFun := handler.EnqueueRequestsFromMapFunc(handler.MapFunc(func(obj client.Object) []reconcile.Request {
 		log := ctrl.Log.WithName("pvcmap").WithName("VolumeReplicationGroup")
@@ -97,7 +99,9 @@ func (r *VolumeReplicationGroupReconciler) SetupWithManager(mgr ctrl.Manager) er
 		Watches(&source.Kind{Type: &corev1.PersistentVolumeClaim{}}, pvcMapFun, builder.WithPredicates(pvcPredicate)).
 		Owns(&volrep.VolumeReplication{})
 
-	kubeObjectsRequestsWatch(builder)
+	if !ramenConfig.KubeObjectProtection.Disabled {
+		kubeObjectsRequestsWatch(builder)
+	}
 
 	return builder.Complete(r)
 }
