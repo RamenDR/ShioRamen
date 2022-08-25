@@ -126,6 +126,10 @@ type DRPlacementControlSpec struct {
 
 	// Action is either Failover or Relocate operation
 	Action DRAction `json:"action,omitempty"`
+
+	// KubeObjectProtection fields to copy to VolumeReplicationGroup
+	// +optional
+	KubeObjectProtection *KubeObjectProtectionSpec `json:"kubeObjectProtection,omitempty"`
 }
 
 // VRGResourceMeta represents the VRG resource.
