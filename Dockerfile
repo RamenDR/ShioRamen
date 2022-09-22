@@ -17,11 +17,23 @@ COPY controllers/ controllers/
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager main.go
 
+# Add labels to image
+LABEL name="Ramen DR operator" \
+  vendor="github.com/RamenDR/ramen" \
+  version="1.0" \
+  summary="Provides disaster recovery and relocations services for workloads and their persistent data" \
+  description="Deploy Ramen DR operator"
+
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+FROM registry.access.redhat.com/ubi8/ubi
 WORKDIR /
 COPY --from=builder /workspace/manager .
+
+# copy licenses to license folder
+RUN mkdir -p licenses
+COPY LICENSE licenses/LICENSE
+
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]
