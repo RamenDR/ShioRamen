@@ -467,6 +467,7 @@ func DownloadTypedObjects(s ObjectStorer, keyPrefix string, objectsPointer inter
 
 	log := ctrl.Log
 	log.Info("s3 download typed objects", "keys", keys, "objectsValue", objectsValue, "objectType", objectType)
+
 	for i := range keys {
 		objectReceiver := objects.Index(i).Addr().Interface()
 
@@ -543,19 +544,20 @@ func (s *s3ObjectStore) DownloadObject(key string,
 	ctx, cancel := context.WithDeadline(context.TODO(), time.Now().Add(s3Timeout))
 	defer cancel()
 
-	if _, err := s.downloader.DownloadWithContext(ctx, writerAt, &s3.GetObjectInput{
+	byteCount, err := s.downloader.DownloadWithContext(ctx, writerAt, &s3.GetObjectInput{
 		Bucket: &bucket,
 		Key:    &key,
-	}); err != nil {
-		return fmt.Errorf("failed to download data of %s:%s, %w",
-			bucket, key, err)
+	})
+	if err != nil {
+		return fmt.Errorf("failed to download data of %s:%s byte count: %d, %w",
+			bucket, key, byteCount, err)
 	}
 
 	gzReader, err := gzip.NewReader(bytes.NewReader(writerAt.Bytes()))
 	if err != nil {
 		if !errorswrapper.Is(err, io.EOF) {
-			return fmt.Errorf("failed to unzip data of %s:%s, %w",
-				bucket, key, err)
+			return fmt.Errorf("failed to unzip data of %s:%s byte count: %d, %w",
+				bucket, key, byteCount, err)
 		}
 
 		s.log.Info("s3 download object end-of-file", "error", err)
@@ -564,6 +566,7 @@ func (s *s3ObjectStore) DownloadObject(key string,
 	s.log.Info("s3 download object decode",
 		"bucket", bucket,
 		"key", key,
+		"byte count", byteCount,
 		"downloadContent", downloadContent,
 		"writerAt", writerAt,
 		"gzReader", gzReader,
