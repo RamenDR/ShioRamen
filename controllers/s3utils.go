@@ -34,6 +34,7 @@ import (
 	ramen "github.com/ramendr/ramen/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -172,6 +173,7 @@ func (s3ObjectStoreGetter) ObjectStore(ctx context.Context,
 		s3Bucket:     s3StoreProfile.S3Bucket,
 		callerTag:    callerTag,
 		name:         s3ProfileName,
+		log:          log,
 	}
 
 	return s3Conn, s3StoreProfile, nil
@@ -210,6 +212,7 @@ type s3ObjectStore struct {
 	s3Bucket     string
 	callerTag    string
 	name         string
+	log          logr.Logger
 }
 
 // CreateBucket creates the given bucket; does not return an error if the bucket
@@ -462,8 +465,14 @@ func DownloadTypedObjects(s ObjectStorer, keyPrefix string, objectsPointer inter
 	objects := reflect.MakeSlice(reflect.SliceOf(objectType),
 		len(keys), len(keys))
 
+	log := ctrl.Log
+	log.Info("s3 download typed objects", "keys", keys, "objectsValue", objectsValue, "objectType", objectType)
+
 	for i := range keys {
 		objectReceiver := objects.Index(i).Addr().Interface()
+
+		log.Info("s3 download typed object", "i", i, "key", keys[i], "objectReceiver", objectReceiver)
+
 		if err := s.DownloadObject(keys[i], objectReceiver); err != nil {
 			return fmt.Errorf("unable to DownloadObject of key %s, %w",
 				keys[i], err)
@@ -535,19 +544,33 @@ func (s *s3ObjectStore) DownloadObject(key string,
 	ctx, cancel := context.WithDeadline(context.TODO(), time.Now().Add(s3Timeout))
 	defer cancel()
 
-	if _, err := s.downloader.DownloadWithContext(ctx, writerAt, &s3.GetObjectInput{
+	byteCount, err := s.downloader.DownloadWithContext(ctx, writerAt, &s3.GetObjectInput{
 		Bucket: &bucket,
 		Key:    &key,
-	}); err != nil {
-		return fmt.Errorf("failed to download data of %s:%s, %w",
-			bucket, key, err)
+	})
+	if err != nil {
+		return fmt.Errorf("failed to download data of %s:%s byte count: %d, %w",
+			bucket, key, byteCount, err)
 	}
 
 	gzReader, err := gzip.NewReader(bytes.NewReader(writerAt.Bytes()))
-	if err != nil && !errorswrapper.Is(err, io.EOF) {
-		return fmt.Errorf("failed to unzip data of %s:%s, %w",
-			bucket, key, err)
+	if err != nil {
+		if !errorswrapper.Is(err, io.EOF) {
+			return fmt.Errorf("failed to unzip data of %s:%s byte count: %d, %w",
+				bucket, key, byteCount, err)
+		}
+
+		s.log.Info("s3 download object end-of-file", "error", err)
 	}
+
+	s.log.Info("s3 download object decode",
+		"bucket", bucket,
+		"key", key,
+		"byte count", byteCount,
+		"downloadContent", downloadContent,
+		"writerAt", writerAt,
+		"gzReader", gzReader,
+	)
 
 	if err := json.NewDecoder(gzReader).Decode(downloadContent); err != nil {
 		return fmt.Errorf("failed to decode json decoder of %s:%s, %w",

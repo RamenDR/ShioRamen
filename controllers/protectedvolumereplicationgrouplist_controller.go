@@ -148,6 +148,7 @@ func (s *ProtectedVolumeReplicationGroupListInstance) getVrgContentsFromS3(prefi
 			// download VRGs
 			prefixInS3 := fmt.Sprintf("%s/%s/", namespace, vrgName)
 
+			s.log.Info("downloadVRGs", "namespace", namespace, "vrg", vrgName, "prefix", prefixInS3)
 			vrgs, err := DownloadVRGs(objectStore, prefixInS3)
 			if err != nil {
 				return vrgsAll, fmt.Errorf("error during DownloadVRGs on '%s': %w", prefixInS3, err)
